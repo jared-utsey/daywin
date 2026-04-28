@@ -502,7 +502,18 @@ document.addEventListener('DOMContentLoaded', () => {
   updateGcalStatus();
   if (clientId) {
     document.getElementById('client-id-input').value = clientId;
-    loadGapi();
+    // Silently pre-load gapi client on return visits (no auth prompt)
+    const s = document.createElement('script');
+    s.id = 'gapi-script';
+    s.src = 'https://apis.google.com/js/api.js';
+    s.onload = () => {
+      gapi.load('client', async () => {
+        await gapi.client.init({});
+        await gapi.client.load('https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest');
+        gapiReady = true;
+      });
+    };
+    document.body.appendChild(s);
   }
 });
 
@@ -700,46 +711,79 @@ function formatTime(time) {
 
 function escHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
-// ─── Google Calendar ──────────────────────────────────────────────────────────
+// ─── Google Calendar (GIS + gapi) ────────────────────────────────────────────
+let tokenClient = null;
+let accessToken = null;
+
 function loadGapi() {
   if (!clientId) return;
-  const script = document.createElement('script');
-  script.src = 'https://apis.google.com/js/api.js';
-  script.onload = () => {
-    gapi.load('client:auth2', async () => {
-      try {
-        await gapi.client.init({
-          clientId: clientId,
-          discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest'],
-          scope: 'https://www.googleapis.com/auth/calendar.events'
-        });
+
+  // Load gapi client
+  if (!document.getElementById('gapi-script')) {
+    const s = document.createElement('script');
+    s.id = 'gapi-script';
+    s.src = 'https://apis.google.com/js/api.js';
+    s.onload = () => {
+      gapi.load('client', async () => {
+        await gapi.client.init({});
+        await gapi.client.load('https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest');
         gapiReady = true;
-        isSignedIn = gapi.auth2.getAuthInstance().isSignedIn.get();
-        gapi.auth2.getAuthInstance().isSignedIn.listen(val => {
-          isSignedIn = val;
-          updateGcalStatus();
-        });
-        updateGcalStatus();
-        if (!isSignedIn) gapi.auth2.getAuthInstance().signIn();
-      } catch(e) {
-        document.getElementById('connect-status').textContent = 'Error: ' + (e.error || e.message || 'Could not initialize Google API. Check your Client ID.');
+        loadGis();
+      });
+    };
+    document.body.appendChild(s);
+  }
+}
+
+function loadGis() {
+  if (!document.getElementById('gis-script')) {
+    const s = document.createElement('script');
+    s.id = 'gis-script';
+    s.src = 'https://accounts.google.com/gsi/client';
+    s.onload = () => initTokenClient();
+    document.body.appendChild(s);
+  } else {
+    initTokenClient();
+  }
+}
+
+function initTokenClient() {
+  tokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: clientId,
+    scope: 'https://www.googleapis.com/auth/calendar.events',
+    callback: (resp) => {
+      if (resp.error) {
+        document.getElementById('connect-status').textContent = 'Auth error: ' + resp.error;
+        return;
       }
-    });
-  };
-  document.body.appendChild(script);
+      accessToken = resp.access_token;
+      gapi.client.setToken({ access_token: accessToken });
+      isSignedIn = true;
+      updateGcalStatus();
+      document.getElementById('connect-status').textContent = 'Connected successfully!';
+      showToast('Google Calendar connected', 'success');
+    }
+  });
+  // Prompt sign-in
+  tokenClient.requestAccessToken({ prompt: 'consent' });
 }
 
 async function createCalendarEvent(task) {
+  if (!accessToken) throw new Error('Not signed in');
+
   const startDateTime = `${task.date}T${task.time || '09:00'}:00`;
   const endH = parseInt(task.time?.split(':')[0] || 9);
   const endM = parseInt(task.time?.split(':')[1] || 0);
-  const endTime = `${task.date}T${String(endH).padStart(2,'0')}:${String(endM).padStart(2,'0')}:00`;
+  const endMStr = String(endM).padStart(2,'0');
+  const endHStr = String(endH).padStart(2,'0');
+  const endDateTime = `${task.date}T${endHStr}:${endMStr}:00`;
+  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
   const event = {
     summary: task.title,
     description: task.notes || '',
-    start: { dateTime: startDateTime, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone },
-    end: { dateTime: endTime, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone },
+    start: { dateTime: startDateTime, timeZone: tz },
+    end: { dateTime: endDateTime, timeZone: tz },
     reminders: { useDefault: false, overrides: [{ method: 'popup', minutes: 0 }] }
   };
 
@@ -752,7 +796,7 @@ function connectGoogle() {
   if (!val) { showToast('Paste your Client ID first.', 'error'); return; }
   clientId = val;
   localStorage.setItem('daywin_client_id', clientId);
-  document.getElementById('connect-status').textContent = 'Loading Google API...';
+  document.getElementById('connect-status').textContent = 'Loading...';
   loadGapi();
 }
 
