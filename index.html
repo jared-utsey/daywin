@@ -1,0 +1,792 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>DayWin — Daily Task Planner</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet" />
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #F7F5F2;
+    --surface: #FFFFFF;
+    --surface2: #F0EDE8;
+    --text: #1A1814;
+    --text-muted: #8A8680;
+    --text-light: #B8B4AF;
+    --accent: #1A1814;
+    --accent-soft: #E8E4DF;
+    --success: #2D6A4F;
+    --success-bg: #D8F3DC;
+    --danger: #9B2335;
+    --border: rgba(26,24,20,0.10);
+    --border-soft: rgba(26,24,20,0.06);
+    --radius: 14px;
+    --radius-sm: 8px;
+    --shadow: 0 1px 3px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.04);
+    --shadow-lg: 0 8px 32px rgba(0,0,0,0.08);
+  }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    font-size: 15px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Layout */
+  .app { display: grid; grid-template-columns: 260px 1fr; min-height: 100vh; }
+
+  /* Sidebar */
+  .sidebar {
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    padding: 32px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 32px;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    overflow-y: auto;
+  }
+
+  .logo {
+    font-family: 'DM Serif Display', serif;
+    font-size: 22px;
+    letter-spacing: -0.3px;
+    color: var(--text);
+  }
+  .logo span { color: var(--text-muted); font-style: italic; }
+
+  .nav { display: flex; flex-direction: column; gap: 4px; }
+  .nav-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 12px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 400;
+    color: var(--text-muted);
+    transition: all 0.15s;
+    border: none; background: none; text-align: left; width: 100%;
+  }
+  .nav-item:hover { background: var(--surface2); color: var(--text); }
+  .nav-item.active { background: var(--accent); color: white; font-weight: 500; }
+  .nav-icon { width: 18px; height: 18px; opacity: 0.7; flex-shrink: 0; }
+  .nav-item.active .nav-icon { opacity: 1; }
+
+  .sidebar-footer {
+    margin-top: auto;
+    padding-top: 24px;
+    border-top: 1px solid var(--border-soft);
+  }
+
+  .gcal-status {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 12px; color: var(--text-muted);
+  }
+  .gcal-dot { width: 7px; height: 7px; border-radius: 50%; background: #ccc; flex-shrink: 0; }
+  .gcal-dot.connected { background: var(--success); }
+
+  /* Main */
+  .main { padding: 40px 48px; max-width: 900px; }
+
+  .page { display: none; }
+  .page.active { display: block; }
+
+  /* Page header */
+  .page-header { margin-bottom: 32px; }
+  .page-title {
+    font-family: 'DM Serif Display', serif;
+    font-size: 32px;
+    letter-spacing: -0.5px;
+    margin-bottom: 4px;
+  }
+  .page-sub { font-size: 14px; color: var(--text-muted); font-weight: 300; }
+
+  /* Dashboard stats */
+  .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 40px; }
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px 24px;
+    box-shadow: var(--shadow);
+  }
+  .stat-label { font-size: 12px; color: var(--text-muted); font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 8px; }
+  .stat-value { font-family: 'DM Serif Display', serif; font-size: 36px; letter-spacing: -1px; line-height: 1; }
+  .stat-sub { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+
+  /* Progress ring */
+  .progress-ring-wrap { display: flex; align-items: center; gap: 24px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px; margin-bottom: 32px; box-shadow: var(--shadow); }
+  .ring-labels { flex: 1; }
+  .ring-title { font-family: 'DM Serif Display', serif; font-size: 18px; margin-bottom: 12px; }
+  .ring-breakdown { display: flex; flex-direction: column; gap: 8px; }
+  .ring-row { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+  .ring-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+
+  /* Upcoming tasks on dashboard */
+  .section-title { font-size: 13px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 16px; }
+
+  .task-group { margin-bottom: 28px; }
+  .task-group-label {
+    font-size: 12px; font-weight: 500; color: var(--text-muted);
+    letter-spacing: 0.04em; text-transform: uppercase;
+    margin-bottom: 10px; display: flex; align-items: center; gap: 8px;
+  }
+  .task-group-label::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+  .task-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 18px;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    box-shadow: var(--shadow);
+    transition: box-shadow 0.15s, transform 0.15s;
+  }
+  .task-card:hover { box-shadow: var(--shadow-lg); transform: translateY(-1px); }
+  .task-card.done { opacity: 0.5; }
+  .task-card.done .task-title { text-decoration: line-through; }
+
+  .check-btn {
+    width: 22px; height: 22px; border-radius: 50%;
+    border: 1.5px solid var(--border);
+    background: none; cursor: pointer; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.15s;
+  }
+  .check-btn:hover { border-color: var(--success); background: var(--success-bg); }
+  .check-btn.checked { background: var(--success); border-color: var(--success); }
+  .check-btn.checked svg { display: block; }
+  .check-btn svg { display: none; width: 11px; height: 11px; }
+
+  .task-info { flex: 1; min-width: 0; }
+  .task-title { font-size: 14px; font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .task-meta { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+
+  .task-time-badge {
+    font-size: 11px; font-weight: 500;
+    padding: 3px 8px; border-radius: 99px;
+    background: var(--accent-soft); color: var(--text-muted);
+    flex-shrink: 0; white-space: nowrap;
+  }
+
+  .gcal-badge {
+    width: 16px; height: 16px; flex-shrink: 0;
+    opacity: 0.4;
+  }
+  .gcal-badge.synced { opacity: 1; }
+
+  .delete-btn {
+    background: none; border: none; cursor: pointer;
+    color: var(--text-light); padding: 2px 4px; line-height: 1;
+    font-size: 16px; opacity: 0;
+    transition: opacity 0.15s, color 0.15s;
+  }
+  .task-card:hover .delete-btn { opacity: 1; }
+  .delete-btn:hover { color: var(--danger); }
+
+  /* Add task form */
+  .add-form {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 24px;
+    box-shadow: var(--shadow);
+    margin-bottom: 32px;
+  }
+  .form-title { font-family: 'DM Serif Display', serif; font-size: 20px; margin-bottom: 20px; }
+
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+  .form-group { display: flex; flex-direction: column; gap: 6px; }
+  .form-group.full { grid-column: 1 / -1; }
+  .form-label { font-size: 12px; font-weight: 500; color: var(--text-muted); letter-spacing: 0.04em; text-transform: uppercase; }
+
+  .form-input {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px; color: var(--text);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 10px 14px;
+    outline: none;
+    transition: border-color 0.15s, box-shadow 0.15s;
+    width: 100%;
+  }
+  .form-input:focus { border-color: var(--text); box-shadow: 0 0 0 3px rgba(26,24,20,0.06); }
+  .form-input::placeholder { color: var(--text-light); }
+
+  textarea.form-input { resize: vertical; min-height: 70px; }
+
+  .form-actions { display: flex; gap: 10px; justify-content: flex-end; align-items: center; }
+
+  .btn {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px; font-weight: 500;
+    padding: 10px 20px;
+    border-radius: var(--radius-sm);
+    border: none; cursor: pointer;
+    transition: all 0.15s;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .btn-primary { background: var(--accent); color: white; }
+  .btn-primary:hover { background: #333; }
+  .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-ghost { background: none; border: 1px solid var(--border); color: var(--text-muted); }
+  .btn-ghost:hover { background: var(--surface2); color: var(--text); }
+
+  .spinner { width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.3); border-top-color: white; border-radius: 50%; animation: spin 0.7s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .save-msg { font-size: 12px; color: var(--success); opacity: 0; transition: opacity 0.3s; }
+  .save-msg.show { opacity: 1; }
+
+  /* API key setup */
+  .setup-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 28px;
+    margin-bottom: 24px;
+    box-shadow: var(--shadow);
+  }
+  .setup-title { font-family: 'DM Serif Display', serif; font-size: 22px; margin-bottom: 8px; }
+  .setup-sub { font-size: 14px; color: var(--text-muted); margin-bottom: 24px; line-height: 1.7; }
+  .setup-steps { display: flex; flex-direction: column; gap: 16px; margin-bottom: 24px; }
+  .setup-step { display: flex; gap: 14px; align-items: flex-start; }
+  .step-num { width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: white; font-size: 12px; font-weight: 500; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px; }
+  .step-text { font-size: 14px; line-height: 1.6; color: var(--text-muted); }
+  .step-text a { color: var(--text); font-weight: 500; }
+  .step-text code { background: var(--surface2); padding: 1px 6px; border-radius: 4px; font-size: 13px; font-family: monospace; color: var(--text); }
+
+  .api-input-row { display: flex; gap: 10px; }
+  .api-input-row .form-input { flex: 1; }
+
+  /* Empty state */
+  .empty { text-align: center; padding: 60px 24px; color: var(--text-muted); }
+  .empty-icon { font-size: 32px; margin-bottom: 12px; opacity: 0.4; }
+  .empty-title { font-family: 'DM Serif Display', serif; font-size: 20px; color: var(--text); margin-bottom: 6px; }
+  .empty-sub { font-size: 14px; }
+
+  /* Toast */
+  .toast {
+    position: fixed; bottom: 24px; right: 24px;
+    background: var(--text); color: white;
+    padding: 12px 18px; border-radius: var(--radius-sm);
+    font-size: 13px; font-weight: 400;
+    transform: translateY(80px); opacity: 0;
+    transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    z-index: 999; max-width: 320px;
+  }
+  .toast.show { transform: translateY(0); opacity: 1; }
+  .toast.error { background: var(--danger); }
+  .toast.success { background: var(--success); }
+
+  /* Responsive */
+  @media (max-width: 768px) {
+    .app { grid-template-columns: 1fr; }
+    .sidebar { position: relative; height: auto; flex-direction: row; flex-wrap: wrap; padding: 16px; gap: 16px; }
+    .logo { width: 100%; }
+    .nav { flex-direction: row; }
+    .sidebar-footer { display: none; }
+    .main { padding: 24px 20px; }
+    .stats-grid { grid-template-columns: 1fr 1fr; }
+    .form-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="logo">Day<span>Win</span></div>
+    <nav class="nav">
+      <button class="nav-item active" onclick="showPage('dashboard')" data-page="dashboard">
+        <svg class="nav-icon" viewBox="0 0 20 20" fill="currentColor"><path d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V4zM3 10a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H4a1 1 0 01-1-1v-6zM14 9a1 1 0 00-1 1v6a1 1 0 001 1h2a1 1 0 001-1v-6a1 1 0 00-1-1h-2z"/></svg>
+        Dashboard
+      </button>
+      <button class="nav-item" onclick="showPage('add')" data-page="add">
+        <svg class="nav-icon" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd"/></svg>
+        Add Task
+      </button>
+      <button class="nav-item" onclick="showPage('all')" data-page="all">
+        <svg class="nav-icon" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M3 4a1 1 0 000 2h14a1 1 0 100-2H3zm0 4a1 1 0 000 2h14a1 1 0 100-2H3zm0 4a1 1 0 000 2h8a1 1 0 100-2H3z" clip-rule="evenodd"/></svg>
+        All Tasks
+      </button>
+      <button class="nav-item" onclick="showPage('settings')" data-page="settings">
+        <svg class="nav-icon" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd"/></svg>
+        Settings
+      </button>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="gcal-status">
+        <div class="gcal-dot" id="gcal-dot"></div>
+        <span id="gcal-status-text">Google Calendar not connected</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main content -->
+  <main class="main">
+
+    <!-- Dashboard -->
+    <div class="page active" id="page-dashboard">
+      <div class="page-header">
+        <h1 class="page-title" id="dash-greeting">Good morning.</h1>
+        <p class="page-sub" id="dash-date"></p>
+      </div>
+
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-label">Today</div>
+          <div class="stat-value" id="stat-today">0</div>
+          <div class="stat-sub">tasks scheduled</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Completed</div>
+          <div class="stat-value" id="stat-done">0</div>
+          <div class="stat-sub">all time</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Upcoming</div>
+          <div class="stat-value" id="stat-upcoming">0</div>
+          <div class="stat-sub">next 7 days</div>
+        </div>
+      </div>
+
+      <div class="progress-ring-wrap">
+        <svg width="80" height="80" viewBox="0 0 80 80">
+          <circle cx="40" cy="40" r="32" fill="none" stroke="#F0EDE8" stroke-width="8"/>
+          <circle cx="40" cy="40" r="32" fill="none" stroke="#1A1814" stroke-width="8"
+            stroke-linecap="round" stroke-dasharray="201" stroke-dashoffset="201"
+            transform="rotate(-90 40 40)" id="progress-ring-circle" style="transition: stroke-dashoffset 0.6s ease;"/>
+          <text x="40" y="45" text-anchor="middle" font-family="DM Serif Display, serif" font-size="16" fill="#1A1814" id="ring-pct">0%</text>
+        </svg>
+        <div class="ring-labels">
+          <div class="ring-title">Today's progress</div>
+          <div class="ring-breakdown">
+            <div class="ring-row"><div class="ring-dot" style="background:#1A1814"></div><span id="ring-done-label">0 complete</span></div>
+            <div class="ring-row"><div class="ring-dot" style="background:#E8E4DF"></div><span id="ring-left-label">0 remaining</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div id="dash-task-groups"></div>
+    </div>
+
+    <!-- Add Task -->
+    <div class="page" id="page-add">
+      <div class="page-header">
+        <h1 class="page-title">Add a task</h1>
+        <p class="page-sub">Schedule it once. It shows up where you need it.</p>
+      </div>
+
+      <div class="add-form">
+        <div class="form-grid">
+          <div class="form-group full">
+            <label class="form-label">Task</label>
+            <input class="form-input" id="input-title" type="text" placeholder="What do you need to do?" />
+          </div>
+          <div class="form-group full">
+            <label class="form-label">Notes (optional)</label>
+            <textarea class="form-input" id="input-notes" placeholder="Any details or context..."></textarea>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Date</label>
+            <input class="form-input" id="input-date" type="date" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Reminder time</label>
+            <input class="form-input" id="input-time" type="time" value="09:00" />
+          </div>
+        </div>
+        <div class="form-actions">
+          <span class="save-msg" id="add-save-msg">Task saved</span>
+          <button class="btn btn-ghost" onclick="clearForm()">Clear</button>
+          <button class="btn btn-primary" id="add-btn" onclick="addTask()">
+            <span id="add-btn-text">Save &amp; push to Calendar</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- All Tasks -->
+    <div class="page" id="page-all">
+      <div class="page-header">
+        <h1 class="page-title">All tasks</h1>
+        <p class="page-sub" id="all-sub">Your full task history</p>
+      </div>
+      <div id="all-task-groups"></div>
+    </div>
+
+    <!-- Settings -->
+    <div class="page" id="page-settings">
+      <div class="page-header">
+        <h1 class="page-title">Settings</h1>
+        <p class="page-sub">Connect Google Calendar to sync your tasks automatically.</p>
+      </div>
+
+      <div class="setup-card">
+        <div class="setup-title">Google Calendar setup</div>
+        <div class="setup-sub">You need a free Google API key to let DayWin push tasks to your calendar. This takes about 5 minutes and is completely free.</div>
+
+        <div class="setup-steps">
+          <div class="setup-step">
+            <div class="step-num">1</div>
+            <div class="step-text">Go to <a href="https://console.cloud.google.com" target="_blank">console.cloud.google.com</a> and sign in with your Google account.</div>
+          </div>
+          <div class="setup-step">
+            <div class="step-num">2</div>
+            <div class="step-text">Create a new project (name it anything, like <code>DayWin</code>).</div>
+          </div>
+          <div class="setup-step">
+            <div class="step-num">3</div>
+            <div class="step-text">Go to <strong>APIs & Services → Library</strong>, search for <code>Google Calendar API</code>, and enable it.</div>
+          </div>
+          <div class="setup-step">
+            <div class="step-num">4</div>
+            <div class="step-text">Go to <strong>APIs & Services → Credentials</strong>, click <strong>Create Credentials → API Key</strong>. Copy the key it gives you.</div>
+          </div>
+          <div class="setup-step">
+            <div class="step-num">5</div>
+            <div class="step-text">Also go to <strong>OAuth consent screen</strong>, create a credential of type <strong>OAuth 2.0 Client ID</strong> (Web application), add <code>http://localhost</code> and your GitHub Pages URL as authorized origins.</div>
+          </div>
+          <div class="setup-step">
+            <div class="step-num">6</div>
+            <div class="step-text">Paste your <strong>Client ID</strong> below and click Connect.</div>
+          </div>
+        </div>
+
+        <div class="api-input-row">
+          <input class="form-input" id="client-id-input" type="text" placeholder="Paste your OAuth Client ID here..." />
+          <button class="btn btn-primary" onclick="connectGoogle()">Connect</button>
+        </div>
+
+        <div style="margin-top: 16px; font-size: 13px; color: var(--text-muted);" id="connect-status"></div>
+      </div>
+
+      <div class="setup-card">
+        <div class="setup-title" style="font-size:18px; margin-bottom: 8px;">Data</div>
+        <p style="font-size:14px; color: var(--text-muted); margin-bottom: 16px;">All tasks are stored locally in your browser. Clear data to start fresh.</p>
+        <button class="btn btn-ghost" onclick="clearAllData()" style="color: var(--danger); border-color: var(--danger);">Clear all data</button>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ─── State ───────────────────────────────────────────────────────────────────
+let tasks = JSON.parse(localStorage.getItem('daywin_tasks') || '[]');
+let clientId = localStorage.getItem('daywin_client_id') || '';
+let gapiReady = false;
+let isSignedIn = false;
+
+// ─── Init ─────────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  setDefaultDate();
+  updateGreeting();
+  renderAll();
+  updateGcalStatus();
+  if (clientId) {
+    document.getElementById('client-id-input').value = clientId;
+    loadGapi();
+  }
+});
+
+function setDefaultDate() {
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  document.getElementById('input-date').value = tomorrow.toISOString().split('T')[0];
+}
+
+function updateGreeting() {
+  const hour = new Date().getHours();
+  const greet = hour < 12 ? 'Good morning.' : hour < 17 ? 'Good afternoon.' : 'Good evening.';
+  document.getElementById('dash-greeting').textContent = greet;
+  document.getElementById('dash-date').textContent = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+}
+
+// ─── Navigation ───────────────────────────────────────────────────────────────
+function showPage(page) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('page-' + page).classList.add('active');
+  document.querySelector(`[data-page="${page}"]`).classList.add('active');
+  if (page === 'dashboard') renderDashboard();
+  if (page === 'all') renderAllTasks();
+}
+
+// ─── Task CRUD ────────────────────────────────────────────────────────────────
+function saveTasks() {
+  localStorage.setItem('daywin_tasks', JSON.stringify(tasks));
+}
+
+async function addTask() {
+  const title = document.getElementById('input-title').value.trim();
+  const date = document.getElementById('input-date').value;
+  const time = document.getElementById('input-time').value;
+  const notes = document.getElementById('input-notes').value.trim();
+
+  if (!title || !date) { showToast('Add a task title and date.', 'error'); return; }
+
+  const btn = document.getElementById('add-btn');
+  const btnText = document.getElementById('add-btn-text');
+  btn.disabled = true;
+  btnText.innerHTML = '<div class="spinner"></div>';
+
+  const task = {
+    id: Date.now().toString(),
+    title, date, time, notes,
+    done: false,
+    synced: false,
+    calEventId: null,
+    created: new Date().toISOString()
+  };
+
+  // Push to Google Calendar
+  if (isSignedIn) {
+    try {
+      const eventId = await createCalendarEvent(task);
+      task.synced = true;
+      task.calEventId = eventId;
+    } catch(e) {
+      showToast('Saved locally. Calendar sync failed — check connection.', 'error');
+    }
+  }
+
+  tasks.unshift(task);
+  saveTasks();
+  renderAll();
+
+  btn.disabled = false;
+  btnText.textContent = 'Save & push to Calendar';
+
+  const msg = document.getElementById('add-save-msg');
+  msg.textContent = task.synced ? 'Saved & synced to Calendar' : 'Saved locally';
+  msg.classList.add('show');
+  setTimeout(() => msg.classList.remove('show'), 2500);
+
+  if (task.synced) showToast('Task added to Google Calendar', 'success');
+
+  clearForm();
+  showPage('dashboard');
+}
+
+function toggleDone(id) {
+  const task = tasks.find(t => t.id === id);
+  if (task) { task.done = !task.done; saveTasks(); renderAll(); }
+}
+
+function deleteTask(id) {
+  tasks = tasks.filter(t => t.id !== id);
+  saveTasks();
+  renderAll();
+  showToast('Task removed');
+}
+
+function clearForm() {
+  document.getElementById('input-title').value = '';
+  document.getElementById('input-notes').value = '';
+  setDefaultDate();
+  document.getElementById('input-time').value = '09:00';
+}
+
+// ─── Render ───────────────────────────────────────────────────────────────────
+function renderAll() { renderDashboard(); renderAllTasks(); }
+
+function renderDashboard() {
+  const today = new Date().toISOString().split('T')[0];
+  const todayTasks = tasks.filter(t => t.date === today);
+  const doneTasks = tasks.filter(t => t.done);
+  const next7 = new Date(); next7.setDate(next7.getDate() + 7);
+  const upcomingTasks = tasks.filter(t => t.date > today && new Date(t.date) <= next7);
+
+  document.getElementById('stat-today').textContent = todayTasks.length;
+  document.getElementById('stat-done').textContent = doneTasks.length;
+  document.getElementById('stat-upcoming').textContent = upcomingTasks.length;
+
+  // Progress ring
+  const todayDone = todayTasks.filter(t => t.done).length;
+  const total = todayTasks.length;
+  const pct = total ? Math.round((todayDone / total) * 100) : 0;
+  const circumference = 201;
+  const offset = circumference - (pct / 100) * circumference;
+  document.getElementById('progress-ring-circle').style.strokeDashoffset = offset;
+  document.getElementById('ring-pct').textContent = pct + '%';
+  document.getElementById('ring-done-label').textContent = todayDone + ' complete';
+  document.getElementById('ring-left-label').textContent = (total - todayDone) + ' remaining';
+
+  // Task groups
+  const groups = groupByDate(tasks.filter(t => !t.done || t.date === today));
+  document.getElementById('dash-task-groups').innerHTML = renderGroups(groups, true);
+}
+
+function renderAllTasks() {
+  const total = tasks.length;
+  document.getElementById('all-sub').textContent = `${total} task${total !== 1 ? 's' : ''} total`;
+  const groups = groupByDate(tasks);
+  document.getElementById('all-task-groups').innerHTML = renderGroups(groups, false);
+}
+
+function groupByDate(taskList) {
+  const map = {};
+  taskList.forEach(t => {
+    if (!map[t.date]) map[t.date] = [];
+    map[t.date].push(t);
+  });
+  return Object.entries(map).sort(([a], [b]) => a.localeCompare(b));
+}
+
+function renderGroups(groups, limitFuture) {
+  if (groups.length === 0) {
+    return `<div class="empty"><div class="empty-icon">◎</div><div class="empty-title">Nothing here yet</div><div class="empty-sub">Add your first task to get started.</div></div>`;
+  }
+  const today = new Date().toISOString().split('T')[0];
+  return groups.map(([date, taskList]) => {
+    const label = formatDateLabel(date, today);
+    const cards = taskList.map(t => renderTaskCard(t)).join('');
+    return `<div class="task-group"><div class="task-group-label">${label}</div>${cards}</div>`;
+  }).join('');
+}
+
+function renderTaskCard(t) {
+  const timeStr = t.time ? formatTime(t.time) : '';
+  const syncIcon = t.synced
+    ? `<svg class="gcal-badge synced" viewBox="0 0 20 20" fill="#4285F4"><path d="M6 2a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2V4a2 2 0 00-2-2H6zm0 2h8v12H6V4zm2 2v2h4V6H8zm0 4v2h4v-2H8zm0 4v2h2v-2H8z"/></svg>`
+    : `<svg class="gcal-badge" viewBox="0 0 20 20" fill="currentColor"><path d="M6 2a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2V4a2 2 0 00-2-2H6z"/></svg>`;
+
+  return `
+    <div class="task-card ${t.done ? 'done' : ''}">
+      <button class="check-btn ${t.done ? 'checked' : ''}" onclick="toggleDone('${t.id}')">
+        <svg viewBox="0 0 12 12" fill="white"><path d="M1 6l4 4 6-7" stroke="white" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <div class="task-info">
+        <div class="task-title">${escHtml(t.title)}</div>
+        ${t.notes ? `<div class="task-meta">${escHtml(t.notes)}</div>` : ''}
+      </div>
+      ${timeStr ? `<div class="task-time-badge">${timeStr}</div>` : ''}
+      ${syncIcon}
+      <button class="delete-btn" onclick="deleteTask('${t.id}')" title="Delete">×</button>
+    </div>`;
+}
+
+function formatDateLabel(date, today) {
+  const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
+  const tomorrowStr = tomorrow.toISOString().split('T')[0];
+  if (date === today) return 'Today';
+  if (date === tomorrowStr) return 'Tomorrow';
+  return new Date(date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+}
+
+function formatTime(time) {
+  const [h, m] = time.split(':').map(Number);
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  const h12 = h % 12 || 12;
+  return `${h12}:${m.toString().padStart(2,'0')} ${ampm}`;
+}
+
+function escHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+// ─── Google Calendar ──────────────────────────────────────────────────────────
+function loadGapi() {
+  if (!clientId) return;
+  const script = document.createElement('script');
+  script.src = 'https://apis.google.com/js/api.js';
+  script.onload = () => {
+    gapi.load('client:auth2', async () => {
+      try {
+        await gapi.client.init({
+          clientId: clientId,
+          discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest'],
+          scope: 'https://www.googleapis.com/auth/calendar.events'
+        });
+        gapiReady = true;
+        isSignedIn = gapi.auth2.getAuthInstance().isSignedIn.get();
+        gapi.auth2.getAuthInstance().isSignedIn.listen(val => {
+          isSignedIn = val;
+          updateGcalStatus();
+        });
+        updateGcalStatus();
+        if (!isSignedIn) gapi.auth2.getAuthInstance().signIn();
+      } catch(e) {
+        document.getElementById('connect-status').textContent = 'Error: ' + (e.error || e.message || 'Could not initialize Google API. Check your Client ID.');
+      }
+    });
+  };
+  document.body.appendChild(script);
+}
+
+async function createCalendarEvent(task) {
+  const startDateTime = `${task.date}T${task.time || '09:00'}:00`;
+  const endH = parseInt(task.time?.split(':')[0] || 9);
+  const endM = parseInt(task.time?.split(':')[1] || 0);
+  const endTime = `${task.date}T${String(endH).padStart(2,'0')}:${String(endM).padStart(2,'0')}:00`;
+
+  const event = {
+    summary: task.title,
+    description: task.notes || '',
+    start: { dateTime: startDateTime, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone },
+    end: { dateTime: endTime, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone },
+    reminders: { useDefault: false, overrides: [{ method: 'popup', minutes: 0 }] }
+  };
+
+  const response = await gapi.client.calendar.events.insert({ calendarId: 'primary', resource: event });
+  return response.result.id;
+}
+
+function connectGoogle() {
+  const val = document.getElementById('client-id-input').value.trim();
+  if (!val) { showToast('Paste your Client ID first.', 'error'); return; }
+  clientId = val;
+  localStorage.setItem('daywin_client_id', clientId);
+  document.getElementById('connect-status').textContent = 'Loading Google API...';
+  loadGapi();
+}
+
+function updateGcalStatus() {
+  const dot = document.getElementById('gcal-dot');
+  const text = document.getElementById('gcal-status-text');
+  if (isSignedIn) {
+    dot.classList.add('connected');
+    text.textContent = 'Google Calendar connected';
+  } else {
+    dot.classList.remove('connected');
+    text.textContent = clientId ? 'Connecting...' : 'Google Calendar not connected';
+  }
+}
+
+function clearAllData() {
+  if (confirm('Clear all tasks and settings? This cannot be undone.')) {
+    localStorage.clear();
+    tasks = [];
+    clientId = '';
+    renderAll();
+    showToast('All data cleared');
+  }
+}
+
+// ─── Toast ────────────────────────────────────────────────────────────────────
+let toastTimer;
+function showToast(msg, type = '') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'toast show' + (type ? ' ' + type : '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 3000);
+}
+</script>
+</body>
+</html>
